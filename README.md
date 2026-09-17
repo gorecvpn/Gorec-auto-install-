@@ -359,8 +359,8 @@ CI дополнительно проверяет итоговый Docker Compose
 
 ## 🤝 Связанные проекты
 
-- [GOREC-DEV / remnawave-gorec-telegram-bot](https://github.com/gorecvpn/GorecVPN-)
-- [GOREC-DEV / gorec-cabinet](https://github.com/gorecvpn/Gorec-Cabinet)
+- [gorecvpn / GorecVPN-](https://github.com/gorecvpn/GorecVPN-)
+- [gorecvpn / Gorec-Cabinet](https://github.com/gorecvpn/Gorec-Cabinet)
 - [Документация Gorec](https://gorecdev.mintlify.app/introduction)
 - [kutovoys / xray-checker](https://github.com/kutovoys/xray-checker)
 - [Mrvibecodic / xray-checker-statuspage (go-build)](https://github.com/Mrvibecodic/xray-checker-statuspage/tree/go-build)
