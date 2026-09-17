@@ -151,8 +151,17 @@ clone_managed_repo() {
   local url="$1"
   local target="$2"
   local title="$3"
+  local ref="${4:-main}"
   if [[ -d "$target/.git" ]]; then
-    success "$title уже загружен."
+    info "Обновляю $title до origin/${ref}."
+    git -C "$target" remote set-url origin "$url" 2>/dev/null || true
+    if git -C "$target" fetch --quiet origin "$ref" \
+      && git -C "$target" checkout -q "$ref" \
+      && git -C "$target" reset --hard "origin/${ref}"; then
+      success "$title обновлён ($(git -C "$target" rev-parse --short HEAD))."
+      return 0
+    fi
+    warn "Не удалось обновить $title — использую локальную копию."
     return 0
   fi
   if [[ -e "$target" ]] && [[ -n "$(find "$target" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
