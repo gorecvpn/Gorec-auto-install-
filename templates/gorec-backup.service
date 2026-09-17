@@ -1,0 +1,11 @@
+[Unit]
+Description=Gorec daily backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/gorec backup --automatic
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

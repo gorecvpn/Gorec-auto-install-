@@ -1,0 +1,48 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Security-focused ShellCheck
+        run: shellcheck -x --severity=warning gorec install.sh tests/*.sh lib/*.sh
+      - name: Detect common secret formats
+        shell: bash
+        run: |
+          failed=0
+          patterns=(
+            '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----'
+            '[0-9]{8,10}:[A-Za-z0-9_-]{35,}'
+            'gh[pousr]_[A-Za-z0-9]{36,}'
+            'AKIA[0-9A-Z]{16}'
+          )
+          for pattern in "${patterns[@]}"; do
+            if git grep -nE -e "$pattern" -- ':!tests/fixtures/*' ':!.github/workflows/security.yml'; then
+              failed=1
+            fi
+          done
+          test "$failed" -eq 0
+      - name: Reject unsafe implementation patterns
+        shell: bash
+        run: |
+          if grep -RInE '(^|[[:space:]])eval[[:space:]]|git reset --hard|docker system prune' \
+            --include='*.sh' --include='gorec' .; then
+            echo "Unsafe pattern found in executable code" >&2
+            exit 1
+          fi

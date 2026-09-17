@@ -1,0 +1,6 @@
+*.log
+*.tmp
+.env
+.idea/
+.vscode/
+.test-tmp/

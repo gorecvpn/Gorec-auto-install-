@@ -1,0 +1,278 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+
+resolve_library_root() {
+  local source_path="${BASH_SOURCE[0]}"
+  while [[ -L "$source_path" ]]; do
+    local source_dir
+    source_dir="$(cd -P "$(dirname "$source_path")" >/dev/null 2>&1 && pwd)"
+    source_path="$(readlink "$source_path")"
+    [[ "$source_path" == /* ]] || source_path="$source_dir/$source_path"
+  done
+  cd -P "$(dirname "$source_path")" >/dev/null 2>&1 && pwd
+}
+
+GOREC_LIB_ROOT="$(resolve_library_root)"
+export GOREC_LIB_ROOT
+
+# shellcheck source=lib/common.sh
+source "$GOREC_LIB_ROOT/lib/common.sh"
+# shellcheck source=lib/ui.sh
+source "$GOREC_LIB_ROOT/lib/ui.sh"
+# shellcheck source=lib/env.sh
+source "$GOREC_LIB_ROOT/lib/env.sh"
+# shellcheck source=lib/system.sh
+source "$GOREC_LIB_ROOT/lib/system.sh"
+# shellcheck source=lib/config.sh
+source "$GOREC_LIB_ROOT/lib/config.sh"
+# shellcheck source=lib/compose.sh
+source "$GOREC_LIB_ROOT/lib/compose.sh"
+# shellcheck source=lib/backup.sh
+source "$GOREC_LIB_ROOT/lib/backup.sh"
+# shellcheck source=lib/update.sh
+source "$GOREC_LIB_ROOT/lib/update.sh"
+# shellcheck source=lib/doctor.sh
+source "$GOREC_LIB_ROOT/lib/doctor.sh"
+# shellcheck source=lib/security.sh
+source "$GOREC_LIB_ROOT/lib/security.sh"
+# shellcheck source=lib/xray.sh
+source "$GOREC_LIB_ROOT/lib/xray.sh"
+# shellcheck source=lib/install.sh
+source "$GOREC_LIB_ROOT/lib/install.sh"
+
+trap 'on_error "$LINENO"' ERR
+
+usage() {
+  ui_banner 'Справка по командам'
+  ui_section 'Основные команды'
+  cat <<'EOF'
+Использование:
+  gorec install                  Первичная установка / повторный мастер
+  gorec menu                     Интерактивное меню
+  gorec status                   Статус и версии контейнеров
+  gorec start|stop|restart       Управление стеком
+  gorec apply                    Применить .env/Caddy/branding
+  gorec logs [service]           Логи основного стека и Xray Monitoring
+  gorec doctor                   Диагностика DNS, HTTPS, API и контейнеров
+  gorec config [target]          bot, stack, caddy, wizard или paths
+  gorec versions                 Сравнить текущие и доступные commit
+  gorec update [component]       all, bot, cabinet или xray
+  gorec xray [action]            Установка и управление Xray Monitoring
+  gorec rollback                 Откат последнего обновления приложений
+  gorec backup [--automatic]     Создать резервную копию
+  gorec backup-list              Показать резервные копии
+  gorec restore <archive>        Восстановить резервную копию
+  gorec schedule <action>        enable, disable или status
+  gorec firewall <action>        безопасная настройка UFW
+  gorec self-update [vX.Y.Z]     Обновить Manager до стабильной версии
+  gorec uninstall [--purge-data] Удалить проект
+  gorec version                  Версия Manager
+EOF
+  ui_section 'Совместимость терминала'
+  cat <<'EOF'
+  NO_COLOR=1 gorec               Отключить ANSI-цвета
+  GOREC_EMOJI=0 gorec         Отключить эмодзи
+  GOREC_EMOJI=1 gorec         Принудительно включить эмодзи
+  GOREC_AUTO_UPDATE=0 gorec   Не проверять Manager при запуске меню
+EOF
+}
+
+menu_summary() {
+  local os_name='не определена' docker_version='не установлен'
+  local service state healthy=0 problems=0
+  if detect_os 2>/dev/null; then
+    os_name="$OS_PRETTY"
+  fi
+  if command_exists docker; then
+    docker_version="$(docker version --format '{{.Server.Version}}' 2>/dev/null || docker --version 2>/dev/null | awk '{print $3}' | tr -d ',' || printf 'недоступен')"
+  fi
+  ui_key_value server 'Сервер' "$os_name"
+  ui_key_value docker 'Docker' "$docker_version"
+  if [[ -f "$COMPOSE_FILE" && -f "$STACK_ENV" ]]; then
+    ui_key_value package 'Bot' "$(git_short_commit "$BOT_SOURCE_DIR")"
+    ui_key_value package 'Cabinet' "$(git_short_commit "$CABINET_SOURCE_DIR")"
+    local total=0
+    while IFS= read -r service; do
+      ((total += 1))
+      state="$(service_state "$service" 2>/dev/null || true)"
+      if [[ "$state" == running/healthy || "$state" == running/none ]]; then
+        ((healthy += 1))
+      else
+        ((problems += 1))
+      fi
+    done < <(managed_services)
+    if [[ "$healthy" -eq "$total" ]]; then
+      ui_key_value healthy 'Состояние' 'Все сервисы работают'
+    elif [[ "$problems" -eq "$total" ]]; then
+      ui_key_value stopped 'Состояние' 'Стек остановлен'
+    else
+      ui_key_value warning 'Состояние' "Требуют внимания: $problems"
+    fi
+  else
+    ui_key_value stopped 'Состояние' 'Проект ещё не установлен'
+  fi
+}
+
+menu_choose_service() {
+  local variable_name="$1"
+  local _gorec_service_choice=''
+  printf '\n'
+  ui_menu_item 1 bot 'Bot'
+  ui_menu_item 2 globe 'Cabinet'
+  ui_menu_item 3 lock 'Caddy'
+  ui_menu_item 4 package 'PostgreSQL'
+  ui_menu_item 5 package 'Redis'
+  if xray_monitoring_enabled; then
+    ui_menu_item 6 status 'Xray Status Page'
+    ui_menu_item 7 doctor 'Xray Checker'
+  fi
+  ui_menu_item 0 package 'Все сервисы'
+  read_tty _gorec_service_choice "${C_CYAN}Выберите сервис [0]: ${C_RESET}"
+  case "$_gorec_service_choice" in
+    1) printf -v "$variable_name" '%s' bot ;;
+    2) printf -v "$variable_name" '%s' cabinet ;;
+    3) printf -v "$variable_name" '%s' caddy ;;
+    4) printf -v "$variable_name" '%s' postgres ;;
+    5) printf -v "$variable_name" '%s' redis ;;
+    6) xray_monitoring_enabled && printf -v "$variable_name" '%s' xray-statuspage || return 1 ;;
+    7) xray_monitoring_enabled && printf -v "$variable_name" '%s' xray-checker || return 1 ;;
+    '' | 0) printf -v "$variable_name" '%s' '' ;;
+    *) warn "Неизвестный сервис."; return 1 ;;
+  esac
+}
+
+menu() {
+  require_root
+  local choice='' service='' update_status=0 manager_command=''
+  if manager_auto_update; then
+    :
+  else
+    update_status=$?
+    if [[ "$update_status" -eq 10 ]]; then
+      read_tty choice "\n${C_CYAN}Нажмите Enter, чтобы открыть обновлённый Manager...${C_RESET}"
+      export GOREC_SKIP_UPDATE_CHECK=1
+      manager_command="$(command -v gorec 2>/dev/null || printf '%s/gorec' "$GOREC_LIB_ROOT")"
+      exec "$manager_command" menu
+    fi
+    warn "Автообновление не завершено. Открываю меню текущей версии v${GOREC_VERSION}."
+    read_tty choice "${C_CYAN}Нажмите Enter для продолжения...${C_RESET}"
+  fi
+  while true; do
+    ui_clear
+    ui_banner 'Единый центр управления Bot, Cabinet и Xray Monitoring'
+    ui_section 'Обзор системы'
+    menu_summary
+    ui_section 'Сервисы и развёртывание'
+    ui_menu_item 1 status 'Статус сервисов'
+    ui_menu_item 2 start 'Запустить стек'
+    ui_menu_item 3 stop 'Остановить стек'
+    ui_menu_item 4 restart 'Перезапустить сервис'
+    ui_menu_item 5 update 'Проверить версии компонентов'
+    ui_menu_item 6 deploy 'Обновить Bot, Cabinet и Xray'
+    ui_section 'Диагностика и обслуживание'
+    ui_menu_item 7 doctor 'Диагностика'
+    ui_menu_item 8 logs 'Просмотр логов'
+    ui_menu_item 9 config 'Настройка проекта'
+    ui_menu_item 10 backup 'Создать резервную копию'
+    ui_menu_item 11 archives 'Управление резервными копиями'
+    ui_menu_item 12 rollback 'Откатить обновление'
+    ui_menu_item 13 status 'Xray Checker + Status Page'
+    ui_separator
+    ui_menu_item 0 exit 'Выход'
+    ui_hint 'Manager проверяет стабильные обновления автоматически при открытии меню.'
+    read_tty choice "\n${C_CYAN}Выберите действие › ${C_RESET}"
+    case "$choice" in
+      1) bash "$GOREC_LIB_ROOT/gorec" status || true ;;
+      2) bash "$GOREC_LIB_ROOT/gorec" start || true ;;
+      3) bash "$GOREC_LIB_ROOT/gorec" stop || true ;;
+      4)
+        service=''
+        if menu_choose_service service; then
+          if [[ -n "$service" ]]; then
+            bash "$GOREC_LIB_ROOT/gorec" restart "$service" || true
+          else
+            bash "$GOREC_LIB_ROOT/gorec" restart || true
+          fi
+        fi
+        ;;
+      5) bash "$GOREC_LIB_ROOT/gorec" versions || true ;;
+      6) bash "$GOREC_LIB_ROOT/gorec" update all || true ;;
+      7) bash "$GOREC_LIB_ROOT/gorec" doctor || true ;;
+      8)
+        service=''
+        if menu_choose_service service; then
+          if [[ -n "$service" ]]; then
+            bash "$GOREC_LIB_ROOT/gorec" logs "$service" || true
+          else
+            bash "$GOREC_LIB_ROOT/gorec" logs || true
+          fi
+        fi
+        ;;
+      9)
+        if bash "$GOREC_LIB_ROOT/gorec" config wizard; then
+          if confirm "Применить новую конфигурацию сейчас?"; then
+            bash "$GOREC_LIB_ROOT/gorec" apply || true
+          fi
+        fi
+        ;;
+      10) bash "$GOREC_LIB_ROOT/gorec" backup || true ;;
+      11) bash "$GOREC_LIB_ROOT/gorec" backup-list || true ;;
+      12) bash "$GOREC_LIB_ROOT/gorec" rollback || true ;;
+      13) bash "$GOREC_LIB_ROOT/gorec" xray menu || true ;;
+      0) return 0 ;;
+      *) warn "Неизвестный пункт." ;;
+    esac
+    read_tty choice "\n${C_CYAN}Нажмите Enter для возврата в меню...${C_RESET}"
+  done
+}
+
+main() {
+  local command="${1:-menu}"
+  [[ $# -eq 0 ]] || shift
+  case "$command" in
+    install) install_stack "$@" ;;
+    menu) menu ;;
+    status) stack_status ;;
+    start) stack_start ;;
+    stop) stack_stop ;;
+    restart) stack_restart "$@" ;;
+    apply) stack_apply ;;
+    logs) stack_logs "$@" ;;
+    doctor) doctor ;;
+    config) config_edit "$@" ;;
+    versions) stack_versions ;;
+    update)
+      if [[ "${1:-}" == xray ]]; then
+        xray_update
+      elif [[ "${1:-all}" == all ]]; then
+        update_components all
+        if xray_monitoring_enabled; then
+          xray_update
+        fi
+      else
+        update_components "$@"
+      fi
+      ;;
+    xray) xray_manage "$@" ;;
+    rollback) rollback_last_update ;;
+    backup)
+      if [[ "${1:-}" == "--automatic" ]]; then
+        backup_run automatic
+      else
+        backup_run manual
+      fi
+      ;;
+    backup-list) backup_list ;;
+    restore) backup_restore "$@" ;;
+    schedule) backup_schedule "$@" ;;
+    firewall) firewall_manage "$@" ;;
+    self-update) self_update "$@" ;;
+    uninstall) uninstall_stack "$@" ;;
+    version | --version | -v) printf 'Gorec Manager %s\n' "$GOREC_VERSION" ;;
+    help | --help | -h) usage ;;
+    *) error "Неизвестная команда: $command"; usage; return 2 ;;
+  esac
+}
+
+main "$@"
