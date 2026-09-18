@@ -43,6 +43,7 @@ check_cors_configuration() {
 
 doctor() {
   require_root
+  migrate_legacy_layout
   local failures=0 webhook_domain cabinet_domain xray_status_domain
   ui_banner 'Комплексная диагностика'
   ui_section 'Проверки'

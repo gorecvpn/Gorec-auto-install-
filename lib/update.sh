@@ -55,6 +55,7 @@ update_components() {
   local component="${1:-all}"
   case "$component" in all | bot | cabinet) ;; *) die "Использование: gorec update [all|bot|cabinet]" ;; esac
   with_lock
+  migrate_legacy_layout
   load_stack_env
   assert_clean_repo "$BOT_SOURCE_DIR" "Bot"
   assert_clean_repo "$CABINET_SOURCE_DIR" "Cabinet"

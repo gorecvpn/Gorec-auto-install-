@@ -15,6 +15,7 @@ compose_up_or_diagnose() {
 stack_start() {
   require_root
   with_lock
+  migrate_legacy_layout
   sanitize_bot_env
   copy_compose_template
   validate_configuration || die "Конфигурация не прошла проверку."
@@ -34,6 +35,7 @@ stack_start() {
 stack_apply() {
   require_root
   with_lock
+  migrate_legacy_layout
   sanitize_bot_env
   copy_compose_template
   validate_configuration || die "Конфигурация не прошла проверку."

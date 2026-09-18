@@ -7,21 +7,23 @@ GOREC_COMMON_LOADED=1
 
 # Переменные ниже используются другими файлами после source.
 # shellcheck disable=SC2034
-readonly GOREC_VERSION="1.3.0"
+readonly GOREC_VERSION="1.4.0"
 readonly GOREC_REPOSITORY="${GOREC_REPOSITORY:-gorecvpn/Gorec-auto-install-}"
 readonly BOT_REPOSITORY="${BOT_REPOSITORY:-https://github.com/gorecvpn/GorecVPN-.git}"
 readonly CABINET_REPOSITORY="${CABINET_REPOSITORY:-https://github.com/gorecvpn/Gorec-Cabinet.git}"
 readonly XRAY_STATUS_REPOSITORY="${XRAY_STATUS_REPOSITORY:-https://github.com/Mrvibecodic/xray-checker-statuspage.git}"
 
+# opt-max layout: config + data + backups under /opt/gorec;
+# bot/cabinet *source* checkouts live at /opt/bot and /opt/cabinet (not under sources/).
 # shellcheck disable=SC2034
 INSTALL_ROOT="${GOREC_INSTALL_ROOT:-/opt/gorec}"
-CONFIG_ROOT="${GOREC_CONFIG_ROOT:-/etc/gorec}"
-DATA_ROOT="${GOREC_DATA_ROOT:-/var/lib/gorec}"
-BACKUP_ROOT="${GOREC_BACKUP_ROOT:-${DATA_ROOT}/backups}"
+CONFIG_ROOT="${GOREC_CONFIG_ROOT:-${INSTALL_ROOT}}"
+DATA_ROOT="${GOREC_DATA_ROOT:-${INSTALL_ROOT}}"
+BACKUP_ROOT="${GOREC_BACKUP_ROOT:-${INSTALL_ROOT}/backups}"
 SOURCE_ROOT="${INSTALL_ROOT}/sources"
-BOT_SOURCE_DIR="${SOURCE_ROOT}/bot"
-CABINET_SOURCE_DIR="${SOURCE_ROOT}/cabinet"
-XRAY_STATUS_SOURCE_DIR="${SOURCE_ROOT}/xray-statuspage"
+BOT_SOURCE_DIR="${GOREC_BOT_SOURCE_DIR:-/opt/bot}"
+CABINET_SOURCE_DIR="${GOREC_CABINET_SOURCE_DIR:-/opt/cabinet}"
+XRAY_STATUS_SOURCE_DIR="${GOREC_XRAY_STATUS_SOURCE_DIR:-${SOURCE_ROOT}/xray-statuspage}"
 COMPOSE_FILE="${INSTALL_ROOT}/compose.yaml"
 CADDY_FILE="${CONFIG_ROOT}/Caddyfile"
 STACK_ENV="${CONFIG_ROOT}/stack.env"
@@ -78,8 +80,151 @@ require_root() {
 }
 
 ensure_runtime_dirs() {
-  mkdir -p "$INSTALL_ROOT" "$CONFIG_ROOT" "$DATA_ROOT" "$BACKUP_ROOT" "$SOURCE_ROOT" "$STATE_ROOT"
-  chmod 700 "$CONFIG_ROOT" "$STATE_ROOT"
+  mkdir -p "$INSTALL_ROOT" "$CONFIG_ROOT" "$DATA_ROOT" "$BACKUP_ROOT" "$SOURCE_ROOT" "$STATE_ROOT" \
+    "$(dirname "$BOT_SOURCE_DIR")" "$(dirname "$CABINET_SOURCE_DIR")"
+  # When config lives inside INSTALL_ROOT (opt-max), tighten state and env files rather than the whole tree.
+  if [[ "$(readlink -m "$CONFIG_ROOT")" == "$(readlink -m "$INSTALL_ROOT")" ]]; then
+    chmod 755 "$INSTALL_ROOT" 2>/dev/null || true
+    chmod 700 "$STATE_ROOT" "$BACKUP_ROOT" 2>/dev/null || true
+  else
+    chmod 700 "$CONFIG_ROOT" "$STATE_ROOT"
+  fi
+}
+
+# Move source → dest when dest is absent. If both are directories, move missing children only.
+migrate_move_if_absent() {
+  local from="$1"
+  local to="$2"
+  local item base
+  [[ -e "$from" ]] || return 0
+  if [[ ! -e "$to" ]]; then
+    mkdir -p "$(dirname "$to")"
+    mv -- "$from" "$to"
+    info "Мигрировано: $from → $to"
+    return 0
+  fi
+  if [[ -d "$from" && -d "$to" ]]; then
+    local nullglob_was=0 dotglob_was=0
+    shopt -q nullglob && nullglob_was=1
+    shopt -q dotglob && dotglob_was=1
+    shopt -s nullglob dotglob
+    for item in "$from"/*; do
+      base="$(basename "$item")"
+      [[ "$base" == "." || "$base" == ".." ]] && continue
+      if [[ ! -e "$to/$base" ]]; then
+        mv -- "$item" "$to/$base"
+        info "Мигрировано: $item → $to/$base"
+      else
+        warn "Пропуск (уже есть): $to/$base ← $item"
+      fi
+    done
+    [[ "$nullglob_was" -eq 1 ]] || shopt -u nullglob
+    [[ "$dotglob_was" -eq 1 ]] || shopt -u dotglob
+    rmdir "$from" 2>/dev/null || true
+    return 0
+  fi
+  warn "Пропуск: $to уже существует, не затираю $from"
+}
+
+migrate_refresh_stack_env_paths() {
+  [[ -f "$STACK_ENV" ]] || return 0
+  declare -F dotenv_set >/dev/null 2>&1 || return 0
+  dotenv_set "$STACK_ENV" BOT_SOURCE_DIR "$BOT_SOURCE_DIR"
+  dotenv_set "$STACK_ENV" CABINET_SOURCE_DIR "$CABINET_SOURCE_DIR"
+  dotenv_set "$STACK_ENV" CONFIG_ROOT "$CONFIG_ROOT"
+  dotenv_set "$STACK_ENV" DATA_ROOT "$DATA_ROOT"
+  dotenv_set "$STACK_ENV" BOT_ENV "$BOT_ENV"
+  if declare -F dotenv_get >/dev/null 2>&1; then
+    local xray_src
+    xray_src="$(dotenv_get "$STACK_ENV" XRAY_STATUS_SOURCE_DIR 2>/dev/null || true)"
+    if [[ -n "$xray_src" ]]; then
+      dotenv_set "$STACK_ENV" XRAY_STATUS_SOURCE_DIR "$XRAY_STATUS_SOURCE_DIR"
+    fi
+  fi
+}
+
+# Detect previous Gorec (/etc,/var/lib, sources under /opt/gorec) and bedolaga trees; migrate into opt-max.
+# GOREC_LEGACY_PREFIX (tests only) prefixes absolute legacy paths, e.g. $TEST_ROOT.
+migrate_legacy_layout() {
+  local prefix="${GOREC_LEGACY_PREFIX:-}"
+  local legacy_opt_gorec="${prefix}/opt/gorec"
+  local legacy_etc_gorec="${prefix}/etc/gorec"
+  local legacy_var_gorec="${prefix}/var/lib/gorec"
+  local legacy_opt_bedolaga="${prefix}/opt/bedolaga"
+  local legacy_etc_bedolaga="${prefix}/etc/bedolaga"
+  local legacy_var_bedolaga="${prefix}/var/lib/bedolaga"
+  local legacy_bin_bedolaga="${prefix}/usr/local/bin/bedolaga"
+  local legacy_lib_bedolaga="${prefix}/usr/local/lib/bedolaga-manager"
+  local legacy_detected=0
+
+  if [[ -e "$legacy_opt_gorec/sources/bot" || -e "$legacy_opt_gorec/sources/cabinet" \
+    || -e "$legacy_etc_gorec" || -e "$legacy_var_gorec" \
+    || -e "$legacy_opt_bedolaga" || -e "$legacy_etc_bedolaga" || -e "$legacy_var_bedolaga" ]]; then
+    legacy_detected=1
+  fi
+  [[ "$legacy_detected" -eq 1 ]] || return 0
+
+  info "Обнаружена прежняя структура каталогов — выполняю миграцию в opt-max (/opt/gorec, /opt/bot, /opt/cabinet)."
+
+  migrate_move_if_absent "$legacy_opt_gorec/sources/bot" "$BOT_SOURCE_DIR"
+  migrate_move_if_absent "$legacy_opt_gorec/sources/cabinet" "$CABINET_SOURCE_DIR"
+  migrate_move_if_absent "$legacy_opt_bedolaga/sources/bot" "$BOT_SOURCE_DIR"
+  migrate_move_if_absent "$legacy_opt_bedolaga/sources/cabinet" "$CABINET_SOURCE_DIR"
+  migrate_move_if_absent "$legacy_opt_bedolaga/sources/xray-statuspage" "$XRAY_STATUS_SOURCE_DIR"
+
+  if [[ "$(readlink -m "$legacy_etc_gorec")" != "$(readlink -m "$CONFIG_ROOT")" ]]; then
+    migrate_move_if_absent "$legacy_etc_gorec" "$CONFIG_ROOT"
+  fi
+  if [[ -d "$legacy_etc_bedolaga" ]]; then
+    migrate_move_if_absent "$legacy_etc_bedolaga/stack.env" "$CONFIG_ROOT/stack.env"
+    migrate_move_if_absent "$legacy_etc_bedolaga/bot.env" "$CONFIG_ROOT/bot.env"
+    migrate_move_if_absent "$legacy_etc_bedolaga/Caddyfile" "$CONFIG_ROOT/Caddyfile"
+    migrate_move_if_absent "$legacy_etc_bedolaga" "$CONFIG_ROOT"
+  fi
+
+  if [[ -d "$legacy_var_gorec" ]]; then
+    migrate_move_if_absent "$legacy_var_gorec/bot" "$DATA_ROOT/bot"
+    migrate_move_if_absent "$legacy_var_gorec/xray-statuspage" "$DATA_ROOT/xray-statuspage"
+    migrate_move_if_absent "$legacy_var_gorec/state" "$STATE_ROOT"
+    migrate_move_if_absent "$legacy_var_gorec/manager.log" "$LOG_FILE"
+    migrate_move_if_absent "$legacy_var_gorec/backups" "$BACKUP_ROOT"
+    migrate_move_if_absent "$legacy_var_gorec" "$DATA_ROOT"
+  fi
+  if [[ -d "$legacy_var_bedolaga" ]]; then
+    migrate_move_if_absent "$legacy_var_bedolaga/bot" "$DATA_ROOT/bot"
+    migrate_move_if_absent "$legacy_var_bedolaga/xray-statuspage" "$DATA_ROOT/xray-statuspage"
+    migrate_move_if_absent "$legacy_var_bedolaga/state" "$STATE_ROOT"
+    migrate_move_if_absent "$legacy_var_bedolaga/manager.log" "$LOG_FILE"
+    migrate_move_if_absent "$legacy_var_bedolaga/backups" "$BACKUP_ROOT"
+    migrate_move_if_absent "$legacy_var_bedolaga" "$DATA_ROOT"
+  fi
+
+  if [[ -d "$legacy_opt_bedolaga" ]]; then
+    migrate_move_if_absent "$legacy_opt_bedolaga/compose.yaml" "$COMPOSE_FILE"
+    migrate_move_if_absent "$legacy_opt_bedolaga/sources/xray-statuspage" "$XRAY_STATUS_SOURCE_DIR"
+    if [[ "$(readlink -m "$legacy_opt_bedolaga")" != "$(readlink -m "$INSTALL_ROOT")" ]]; then
+      migrate_move_if_absent "$legacy_opt_bedolaga" "$INSTALL_ROOT"
+    fi
+  fi
+
+  if [[ -z "$prefix" ]] && { [[ -e /usr/local/bin/bedolaga ]] || [[ -d /usr/local/lib/bedolaga-manager ]]; }; then
+    warn "Найдены остатки bedolaga CLI: /usr/local/bin/bedolaga и/или /usr/local/lib/bedolaga-manager"
+    if declare -F confirm >/dev/null 2>&1 && tty_available; then
+      if confirm "Удалить устаревшие bedolaga CLI (gorec уже установлен)?"; then
+        rm -f -- /usr/local/bin/bedolaga
+        rm -rf -- /usr/local/lib/bedolaga-manager /usr/local/lib/bedolaga-manager.previous
+        success "Устаревший bedolaga CLI удалён."
+      fi
+    else
+      warn "Удалите вручную: rm -f /usr/local/bin/bedolaga; rm -rf /usr/local/lib/bedolaga-manager"
+    fi
+  elif [[ -n "$prefix" ]] && { [[ -e "$legacy_bin_bedolaga" ]] || [[ -d "$legacy_lib_bedolaga" ]]; }; then
+    warn "Найдены остатки bedolaga CLI в тестовом префиксе ($prefix)."
+  fi
+
+  ensure_runtime_dirs
+  migrate_refresh_stack_env_paths
+  success "Миграция путей в opt-max завершена (существующие файлы не перезаписывались)."
 }
 
 template_dir() {

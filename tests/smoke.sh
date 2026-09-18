@@ -6,8 +6,10 @@ TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf -- "$TEST_ROOT"' EXIT
 
 export GOREC_INSTALL_ROOT="$TEST_ROOT/opt/gorec"
-export GOREC_CONFIG_ROOT="$TEST_ROOT/etc/gorec"
-export GOREC_DATA_ROOT="$TEST_ROOT/var/lib/gorec"
+export GOREC_CONFIG_ROOT="$TEST_ROOT/opt/gorec"
+export GOREC_DATA_ROOT="$TEST_ROOT/opt/gorec"
+export GOREC_BOT_SOURCE_DIR="$TEST_ROOT/opt/bot"
+export GOREC_CABINET_SOURCE_DIR="$TEST_ROOT/opt/cabinet"
 export GOREC_LIB_ROOT="$PROJECT_ROOT"
 
 # shellcheck disable=SC1091
@@ -94,8 +96,13 @@ telegram_response="$(telegram_api_request '1234567:abcdefghijklmnopqrstuvwxyz_12
 [[ "$telegram_response" == *'"username":"test_bot"'* ]] || fail "Telegram API response was lost"
 ! grep -q '1234567:' "$curl_args" || fail "Telegram token leaked into curl arguments"
 grep -q '1234567:' "$curl_config" || fail "Telegram request URL was not passed through curl config"
-safe_realpath_under "$DATA_ROOT/backups/test.tar.gz" "$DATA_ROOT" || fail "safe child rejected"
-! safe_realpath_under "/etc/passwd" "$DATA_ROOT" || fail "unsafe path accepted"
+safe_realpath_under "$BACKUP_ROOT/test.tar.gz" "$BACKUP_ROOT" || fail "safe child rejected"
+! safe_realpath_under "/etc/passwd" "$BACKUP_ROOT" || fail "unsafe path accepted"
+[[ "$BACKUP_ROOT" == "$INSTALL_ROOT/backups" ]] || fail "BACKUP_ROOT default is not under INSTALL_ROOT"
+[[ "$BOT_SOURCE_DIR" == "$TEST_ROOT/opt/bot" ]] || fail "BOT_SOURCE_DIR not opt-max"
+[[ "$CABINET_SOURCE_DIR" == "$TEST_ROOT/opt/cabinet" ]] || fail "CABINET_SOURCE_DIR not opt-max"
+[[ "$CONFIG_ROOT" == "$INSTALL_ROOT" ]] || fail "CONFIG_ROOT should match INSTALL_ROOT in opt-max tests"
+[[ "$DATA_ROOT" == "$INSTALL_ROOT" ]] || fail "DATA_ROOT should match INSTALL_ROOT in opt-max tests"
 
 command_exists() {
   [[ "$1" != sshd ]] && command -v "$1" >/dev/null 2>&1
@@ -191,5 +198,31 @@ EOF
   grep -q '^VISIBLE_RESULT=visible-input$' <<<"$tty_output" || fail "read_tty lost caller value"
   grep -q '^SECRET_RESULT=secret-input$' <<<"$tty_output" || fail "read_secret_tty lost caller value"
 fi
+
+
+# --- opt-max legacy migration (move-if-missing) ---
+legacy_root="$TEST_ROOT/legacy-prefix"
+mkdir -p "$legacy_root/opt/gorec/sources/bot" "$legacy_root/etc/gorec" \
+  "$legacy_root/var/lib/gorec/bot" "$legacy_root/var/lib/gorec/backups" \
+  "$legacy_root/var/lib/bedolaga/backups"
+printf 'old-bot\n' >"$legacy_root/opt/gorec/sources/bot/README"
+printf 'from-etc\n' >"$legacy_root/etc/gorec/migrated-from-etc.marker"
+printf 'data\n' >"$legacy_root/var/lib/gorec/bot/keep.txt"
+printf 'bak-g\n' >"$legacy_root/var/lib/gorec/backups/old-gorec.tar.gz"
+printf 'bak-b\n' >"$legacy_root/var/lib/bedolaga/backups/old-bedolaga.tar.gz"
+# Newer file already at destination must not be clobbered
+mkdir -p "$DATA_ROOT/bot"
+printf 'newer\n' >"$DATA_ROOT/bot/keep.txt"
+export GOREC_LEGACY_PREFIX="$legacy_root"
+migrate_legacy_layout
+unset GOREC_LEGACY_PREFIX
+[[ -f "$BOT_SOURCE_DIR/README" ]] || fail "bot source was not migrated to BOT_SOURCE_DIR"
+[[ ! -e "$legacy_root/opt/gorec/sources/bot" ]] || fail "legacy bot source still present"
+[[ -f "$CONFIG_ROOT/migrated-from-etc.marker" ]] || fail "etc/gorec marker was not migrated"
+assert_equal "$(cat "$CONFIG_ROOT/migrated-from-etc.marker")" "from-etc"
+assert_equal "$(cat "$DATA_ROOT/bot/keep.txt")" "newer"
+[[ -f "$BACKUP_ROOT/old-gorec.tar.gz" ]] || fail "gorec backups not migrated under /opt"
+[[ -f "$BACKUP_ROOT/old-bedolaga.tar.gz" ]] || fail "bedolaga backups not migrated under /opt"
+[[ "$BACKUP_ROOT" == "$INSTALL_ROOT/backups" ]] || fail "backups must live under INSTALL_ROOT"
 
 printf 'Smoke tests passed.\n'

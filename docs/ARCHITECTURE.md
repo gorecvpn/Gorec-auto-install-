@@ -4,14 +4,17 @@
 
 Manager устанавливает и обслуживает Bot, Cabinet, PostgreSQL, Redis и Caddy. Опционально он также управляет Xray Checker и Xray Checker Status Page. Remnawave Panel не входит в стек: Bot обращается к ней по HTTPS API с ключом, введённым владельцем сервера.
 
-Manager владеет следующими путями:
+Manager владеет следующими путями (layout **opt-max**):
 
 - `/usr/local/lib/gorec-manager`;
 - `/usr/local/bin/gorec`;
-- `/opt/gorec`;
-- `/etc/gorec`;
-- `/var/lib/gorec`;
+- `/opt/bot` — исходники Bot;
+- `/opt/cabinet` — исходники Cabinet;
+- `/opt/gorec` — Compose, конфиги (`stack.env`, `bot.env`, `Caddyfile`), данные (`bot/`, `xray-statuspage/`), `backups/`, `state/`;
+- опционально `/opt/gorec/sources/xray-statuspage`;
 - `gorec-backup.service` и `gorec-backup.timer`.
+
+Прежние пути `/etc/gorec`, `/var/lib/gorec`, `/opt/gorec/sources/{bot,cabinet}` и деревья bedolaga мигрируются в opt-max при install/update/doctor (без слепой перезаписи).
 
 Он не удаляет чужие контейнеры, images, networks или volumes и не выполняет глобальный `docker system prune`.
 
@@ -25,19 +28,19 @@ Manager владеет следующими путями:
 
 ## Секреты
 
-Секреты хранятся в `/etc/gorec/*.env` с режимом `600`. Manager не печатает содержимое этих файлов в обычных командах; Telegram Bot Token передаётся `curl` через stdin-конфиг и не появляется в аргументах процесса.
+Секреты хранятся в `/opt/gorec/*.env` (`bot.env`, `stack.env`) с режимом `600`. Manager не печатает содержимое этих файлов в обычных командах; Telegram Bot Token передаётся `curl` через stdin-конфиг и не появляется в аргументах процесса.
 
 Файлы бэкапа также имеют режим `600`, но содержат секреты, дамп базы и при включённом Xray Monitoring — базу и ключ шифрования подписок Status Page. Их следует дополнительно копировать в зашифрованное внешнее хранилище.
 
 ## Опциональные профили
 
-Сервисы Xray Monitoring объявлены в Compose-профиле `xray-monitoring`. Manager включает профиль только при `XRAY_MONITORING_ENABLED=true`; обычные установки сохраняют прежний набор из пяти контейнеров. Отключение удаляет контейнеры и HTTPS-маршрут, но сохраняет `/var/lib/gorec/xray-statuspage`. Полное удаление данных требует отдельной фразы подтверждения `PURGE-XRAY`.
+Сервисы Xray Monitoring объявлены в Compose-профиле `xray-monitoring`. Manager включает профиль только при `XRAY_MONITORING_ENABLED=true`; обычные установки сохраняют прежний набор из пяти контейнеров. Отключение удаляет контейнеры и HTTPS-маршрут, но сохраняет `/opt/gorec/xray-statuspage`. Полное удаление данных требует отдельной фразы подтверждения `PURGE-XRAY`.
 
 Xray Checker загружается как официальный multi-architecture образ. Status Page собирается локально из управляемого detached checkout ветки `go-build`, потому что upstream GHCR workflow публикует одноплатформенный образ. Такой подход сохраняет поддержку AMD64/ARM64 и позволяет Manager вернуть предыдущий commit и image Checker, если обновлённый модуль не проходит health checks.
 
 ## Модель обновления
 
-Исходники upstream считаются управляемыми и должны оставаться чистыми. Пользовательская конфигурация хранится за пределами checkout, поэтому обновление не требует перезаписи `.env` внутри Git-репозиториев.
+Исходники upstream (`/opt/bot`, `/opt/cabinet`) считаются управляемыми и должны оставаться чистыми. Пользовательская конфигурация и данные Bot лежат в `/opt/gorec` (не внутри checkout), поэтому обновление не требует перезаписи `.env` внутри Git-репозиториев. Не путайте **исходники** `/opt/bot` с **данными** `/opt/gorec/bot`.
 
 Перед обновлением сохраняются commit и резервная копия. Новый commit сначала собирается, затем запускается. При провале health checks Manager возвращает исходники и образы приложения. Автоматический rollback базы намеренно не выполняется, чтобы не потерять записи, появившиеся после запуска новой версии.
 
