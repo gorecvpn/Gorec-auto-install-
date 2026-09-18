@@ -34,18 +34,44 @@ backup_copy_xray_data() {
   fi
 }
 
+# In opt-max, CONFIG_ROOT == DATA_ROOT == INSTALL_ROOT (/opt/gorec). Copying
+# CONFIG_ROOT/. into a staging dir under DATA_ROOT would recurse into itself.
+backup_same_root() {
+  local a b
+  a="$(readlink -m "$1")"
+  b="$(readlink -m "$2")"
+  [[ -n "$a" && -n "$b" && "$a" == "$b" ]]
+}
+
+backup_copy_config() {
+  local destination="$1"
+  mkdir -p "$destination"
+  if backup_same_root "$CONFIG_ROOT" "$INSTALL_ROOT" || backup_same_root "$CONFIG_ROOT" "$DATA_ROOT"; then
+    local name
+    for name in stack.env bot.env Caddyfile compose.yaml; do
+      if [[ -e "$CONFIG_ROOT/$name" ]]; then
+        cp -a "$CONFIG_ROOT/$name" "$destination/"
+      fi
+    done
+  else
+    cp -a "$CONFIG_ROOT/." "$destination/"
+  fi
+}
+
 backup_create() {
   require_root
   local kind="${1:-manual}"
   local archive staging database_dump='unavailable'
   ensure_runtime_dirs
-  staging="$(mktemp -d "${DATA_ROOT}/backup-stage.XXXXXX")"
+  # Always stage outside INSTALL/DATA/CONFIG roots (opt-max co-locate them under /opt/gorec).
+  staging="$(mktemp -d /tmp/gorec-backup-stage.XXXXXX)"
+  trap 'rm -rf -- "${staging:-}"' RETURN
   archive="$(backup_archive_name "$kind")"
   mkdir -p "$staging/config" "$staging/app-data"
 
   info "Создаю резервную копию ($kind)."
   if [[ -f "$STACK_ENV" ]]; then
-    cp -a "$CONFIG_ROOT/." "$staging/config/"
+    backup_copy_config "$staging/config"
   fi
   if [[ -d "$DATA_ROOT/bot" ]]; then
     cp -a "$DATA_ROOT/bot/." "$staging/app-data/"
