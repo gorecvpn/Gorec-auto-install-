@@ -265,7 +265,8 @@ dotenv_set "$BOT_ENV" REMNAWAVE_API_URL "https://panel.myvpn.ru"
 dotenv_set "$BOT_ENV" REMNAWAVE_API_KEY "abcDEF_123.456-xyz"
 validate_bot_values || fail "valid Remnawave values rejected"
 
-grep -q '\${BOT_ENV:-bot.env}' "$PROJECT_ROOT/templates/compose.yaml" || fail "compose env_file default missing"
+# shellcheck disable=SC2016
+grep -Fq '${BOT_ENV:-bot.env}' "$PROJECT_ROOT/templates/compose.yaml" || fail "compose env_file default missing"
 grep -q 'handle {' "$PROJECT_ROOT/templates/Caddyfile.tmpl" || fail "webhook handle block missing for ACME safety"
 
 printf 'Smoke tests passed.\n'
