@@ -38,14 +38,14 @@ curl() {
   for argument in "$@"; do
     case "$argument" in
       *'/releases/latest')
-        printf '%s\n' 'https://github.com/gorecvpn/Gorec-auto-install-/releases/tag/v1.5.1'
+        printf '%s\n' 'https://github.com/gorecvpn/Gorec-auto-install-/releases/tag/v1.5.2'
         return 0
         ;;
-      *'/v1.5.1/CHANGELOG.md')
+      *'/v1.5.2/CHANGELOG.md')
         cat <<'EOF'
 # Changelog
 
-## 1.5.1 — 2026-09-18
+## 1.5.2 — 2026-09-18
 
 - Первое понятное изменение.
 - Второе понятное изменение.
@@ -63,8 +63,8 @@ EOF
   return 1
 }
 
-[[ "$(manager_latest_release_tag)" == v1.5.1 ]] || fail "latest stable release tag was not detected"
-mapfile -t release_notes < <(manager_release_notes v1.5.1)
+[[ "$(manager_latest_release_tag)" == v1.5.2 ]] || fail "latest stable release tag was not detected"
+mapfile -t release_notes < <(manager_release_notes v1.5.2)
 [[ "${#release_notes[@]}" -eq 3 ]] || fail "release notes were not limited to three items"
 [[ "${release_notes[0]}" == 'Первое понятное изменение.' ]] || fail "first release note is incorrect"
 [[ "${release_notes[2]}" == 'Третье понятное изменение.' ]] || fail "third release note is incorrect"
@@ -88,9 +88,9 @@ manager_install_release() {
 update_status=0
 manager_auto_update || update_status=$?
 [[ "$update_status" -eq 10 ]] || fail "automatic update did not signal a process restart"
-[[ "$(cat "$install_file")" == v1.5.1 ]] || fail "automatic update selected the wrong tag"
-grep -q '^1.5.0$' "$notice_file" || fail "current version is missing from update notice"
-grep -q '^1.5.1$' "$notice_file" || fail "new version is missing from update notice"
-[[ "$(cat "$MANAGER_UPDATE_CHECK_STATE")" == v1.5.1 ]] || fail "update check state was not recorded"
+[[ "$(cat "$install_file")" == v1.5.2 ]] || fail "automatic update selected the wrong tag"
+grep -q '^1.5.1$' "$notice_file" || fail "current version is missing from update notice"
+grep -q '^1.5.2$' "$notice_file" || fail "new version is missing from update notice"
+[[ "$(cat "$MANAGER_UPDATE_CHECK_STATE")" == v1.5.2 ]] || fail "update check state was not recorded"
 
 printf 'Manager update tests passed.\n'
