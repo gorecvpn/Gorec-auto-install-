@@ -190,6 +190,10 @@ gorec xray install
 
 > [!TIP]
 > После изменения конфигурации используйте `gorec apply`. Обычный `restart` не перечитывает переменные окружения уже созданного контейнера.
+>
+> `gorec apply` также обновляет `/opt/gorec/.env` → `stack.env`, поэтому `cd /opt/gorec && docker compose ps` работает без ручного `--env-file`. CLI `gorec` по-прежнему передаёт `--env-file` сам.
+>
+> Remnawave URL и API key **обязательны** и не подставляются из sample/чужих панелей. Диагностика: `gorec doctor`.
 
 ---
 
@@ -286,6 +290,7 @@ gorec rollback
 /opt/gorec/compose.yaml              управляемый Docker Compose
 /opt/gorec/Caddyfile                 reverse proxy
 /opt/gorec/stack.env                 параметры Compose
+/opt/gorec/.env                      symlink → stack.env (для bare docker compose)
 /opt/gorec/bot.env                   конфигурация Bot
 /opt/gorec/bot/                      постоянные данные Bot (не путать с /opt/bot)
 /opt/gorec/xray-statuspage/          данные опциональной Status Page

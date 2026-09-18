@@ -167,7 +167,7 @@ dotenv_set "$STACK_ENV" XRAY_MONITORING_ENABLED true
 
 dotenv_set "$BOT_ENV" BOT_TOKEN "1234567:abcdefghijklmnopqrstuvwxyz_123456"
 dotenv_set "$BOT_ENV" ADMIN_IDS "123,456"
-dotenv_set "$BOT_ENV" REMNAWAVE_API_URL "https://panel.example.com"
+dotenv_set "$BOT_ENV" REMNAWAVE_API_URL "https://panel.myvpn.ru"
 dotenv_set "$BOT_ENV" REMNAWAVE_API_KEY "abcDEF_123.456-xyz"
 validate_bot_values || fail "valid Bot values rejected"
 dotenv_set "$BOT_ENV" ADMIN_IDS "123,unsafe"
@@ -224,5 +224,48 @@ assert_equal "$(cat "$DATA_ROOT/bot/keep.txt")" "newer"
 [[ -f "$BACKUP_ROOT/old-gorec.tar.gz" ]] || fail "gorec backups not migrated under /opt"
 [[ -f "$BACKUP_ROOT/old-bedolaga.tar.gz" ]] || fail "bedolaga backups not migrated under /opt"
 [[ "$BACKUP_ROOT" == "$INSTALL_ROOT/backups" ]] || fail "backups must live under INSTALL_ROOT"
+
+
+# --- harden: compose .env symlink, Remnawave placeholders, uploads, admin chat ---
+ensure_compose_dotenv
+[[ -L "${INSTALL_ROOT}/.env" ]] || fail "INSTALL_ROOT/.env symlink was not created"
+[[ "$(readlink -f "${INSTALL_ROOT}/.env")" == "$(readlink -f "$STACK_ENV")" ]] || fail ".env does not point at stack.env"
+
+grep -qE 'handle[[:space:]]+/uploads/\*' "$CADDY_FILE" || fail "Caddy /uploads route missing after render"
+
+is_placeholder_remnawave_url "https://panel.example.com" || fail "example.com not detected as placeholder"
+is_placeholder_remnawave_url "https://haybaadmin.haybavpn.ru" || fail "haybaadmin not detected as placeholder"
+is_placeholder_remnawave_url "https://panel.myvpn.ru" && fail "real host rejected as placeholder"
+is_placeholder_remnawave_key "your_api_key_here" || fail "placeholder key not detected"
+! is_placeholder_remnawave_key "abcDEF_123.456-xyz" || fail "valid key treated as placeholder"
+is_placeholder_admin_chat_id "-1001234567890" || fail "sample admin chat id not detected"
+
+dotenv_set "$BOT_ENV" REMNAWAVE_API_URL "https://haybaadmin.haybavpn.ru"
+dotenv_set "$BOT_ENV" REMNAWAVE_API_KEY "your_api_key_here"
+dotenv_set "$BOT_ENV" ADMIN_NOTIFICATIONS_ENABLED "true"
+dotenv_set "$BOT_ENV" ADMIN_NOTIFICATIONS_CHAT_ID "-1001234567890"
+sanitize_bot_env
+! grep -q '^REMNAWAVE_API_URL=' "$BOT_ENV" || fail "sample Remnawave URL was not cleared"
+! grep -q '^REMNAWAVE_API_KEY=' "$BOT_ENV" || fail "placeholder Remnawave key was not cleared"
+! grep -q '^ADMIN_NOTIFICATIONS_CHAT_ID=' "$BOT_ENV" || fail "sample admin chat id was not cleared"
+assert_equal "$(dotenv_get "$BOT_ENV" ADMIN_NOTIFICATIONS_ENABLED)" "false"
+
+dotenv_set "$BOT_ENV" REMNAWAVE_API_URL "https://haybaadmin.haybavpn.ru"
+dotenv_set "$BOT_ENV" REMNAWAVE_API_KEY "abcDEF_123.456-xyz"
+dotenv_set "$BOT_ENV" BOT_TOKEN "1234567:abcdefghijklmnopqrstuvwxyz_123456"
+dotenv_set "$BOT_ENV" ADMIN_IDS "123,456"
+if validate_bot_values >/dev/null 2>&1; then
+  fail "haybaadmin Remnawave URL accepted by validate_bot_values"
+fi
+dotenv_set "$BOT_ENV" REMNAWAVE_API_URL "https://panel.example.com"
+if validate_bot_values >/dev/null 2>&1; then
+  fail "example.com Remnawave URL accepted by validate_bot_values"
+fi
+dotenv_set "$BOT_ENV" REMNAWAVE_API_URL "https://panel.myvpn.ru"
+dotenv_set "$BOT_ENV" REMNAWAVE_API_KEY "abcDEF_123.456-xyz"
+validate_bot_values || fail "valid Remnawave values rejected"
+
+grep -q '\${BOT_ENV:-bot.env}' "$PROJECT_ROOT/templates/compose.yaml" || fail "compose env_file default missing"
+grep -q 'handle {' "$PROJECT_ROOT/templates/Caddyfile.tmpl" || fail "webhook handle block missing for ACME safety"
 
 printf 'Smoke tests passed.\n'

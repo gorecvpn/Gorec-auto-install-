@@ -50,11 +50,11 @@ services:
 
   bot:
     build:
-      context: ${BOT_SOURCE_DIR}
+      context: ${BOT_SOURCE_DIR:-/opt/bot}
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
-      - ${BOT_ENV}
+      - ${BOT_ENV:-bot.env}
     environment:
       DOCKER_ENV: "true"
       DATABASE_MODE: auto
@@ -72,11 +72,11 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ${DATA_ROOT}/bot/logs:/app/logs:rw
-      - ${DATA_ROOT}/bot/data:/app/data:rw
-      - ${DATA_ROOT}/bot/uploads:/app/uploads:rw
-      - ${DATA_ROOT}/bot/locales:/app/locales:rw
-      - ${DATA_ROOT}/bot/vpn_logo.png:/app/vpn_logo.png:ro
+      - ${DATA_ROOT:-.}/bot/logs:/app/logs:rw
+      - ${DATA_ROOT:-.}/bot/data:/app/data:rw
+      - ${DATA_ROOT:-.}/bot/uploads:/app/uploads:rw
+      - ${DATA_ROOT:-.}/bot/locales:/app/locales:rw
+      - ${DATA_ROOT:-.}/bot/vpn_logo.png:/app/vpn_logo.png:ro
     networks:
       - backend
       - edge
@@ -91,7 +91,7 @@ services:
 
   cabinet:
     build:
-      context: ${CABINET_SOURCE_DIR}
+      context: ${CABINET_SOURCE_DIR:-/opt/cabinet}
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-/api}
@@ -123,7 +123,7 @@ services:
       - "443:443"
       - "443:443/udp"
     volumes:
-      - ${CONFIG_ROOT}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${CONFIG_ROOT:-.}/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:
@@ -158,7 +158,7 @@ services:
       INTERNAL_PORT: "8081"
       TLS_MODE: "off"
     volumes:
-      - ${DATA_ROOT}/xray-statuspage:/data
+      - ${DATA_ROOT:-.}/xray-statuspage:/data
     networks:
       - edge
     logging: *default-logging

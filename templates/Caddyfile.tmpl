@@ -4,7 +4,12 @@
 }
 @@WEBHOOK_DOMAIN@@ {
   encode zstd gzip
-  reverse_proxy bot:8080
+
+  # ACME http-01 is answered by Caddy on :80 before site handlers.
+  # Keep reverse_proxy inside handle{} so /.well-known is never specially stolen.
+  handle {
+    reverse_proxy bot:8080
+  }
 
   header {
     Strict-Transport-Security "max-age=31536000; includeSubDomains"

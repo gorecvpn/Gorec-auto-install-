@@ -18,6 +18,8 @@ stack_start() {
   migrate_legacy_layout
   sanitize_bot_env
   copy_compose_template
+  ensure_compose_dotenv
+  render_caddyfile
   validate_configuration || die "Конфигурация не прошла проверку."
   info "Запускаю Gorec."
   compose_up_or_diagnose -d --remove-orphans || return 1
@@ -38,6 +40,8 @@ stack_apply() {
   migrate_legacy_layout
   sanitize_bot_env
   copy_compose_template
+  ensure_compose_dotenv
+  render_caddyfile
   validate_configuration || die "Конфигурация не прошла проверку."
   info "Применяю конфигурацию и пересобираю компоненты, которым нужны build-time параметры."
   compose_up_or_diagnose -d --build --force-recreate --remove-orphans || return 1
@@ -152,6 +156,7 @@ config_edit() {
       ui_banner 'Файлы конфигурации'
       ui_key_value config 'Bot env' "$BOT_ENV"
       ui_key_value config 'Stack env' "$STACK_ENV"
+      ui_key_value config 'Compose .env' "${INSTALL_ROOT}/.env"
       ui_key_value config 'Caddyfile' "$CADDY_FILE"
       if xray_monitoring_enabled; then
         ui_key_value config 'Xray source' "$XRAY_STATUS_SOURCE_DIR"
@@ -168,6 +173,7 @@ config_edit() {
   chmod 600 "$file"
   if [[ "$target" == stack ]]; then
     validate_stack_values || die "Некорректные значения в $STACK_ENV"
+    ensure_compose_dotenv
     render_caddyfile
   fi
   validate_configuration || die "После редактирования конфигурация некорректна. Исправьте файл: $file"

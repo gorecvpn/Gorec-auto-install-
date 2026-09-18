@@ -78,6 +78,9 @@ backup_create() { printf '%s\n' "$TEST_ROOT/preupdate.tar.gz"; }
 dotenv_merge_missing() { :; }
 sanitize_bot_env() { :; }
 sync_bot_assets() { :; }
+copy_compose_template() { :; }
+ensure_compose_dotenv() { :; }
+render_caddyfile() { :; }
 wait_for_health() { return 0; }
 compose() {
   printf '%s\n' "$*" >>"$compose_log"

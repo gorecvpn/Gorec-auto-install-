@@ -52,9 +52,9 @@ usage() {
   gorec menu                     Интерактивное меню
   gorec status                   Статус и версии контейнеров
   gorec start|stop|restart       Управление стеком
-  gorec apply                    Применить .env/Caddy/branding
+  gorec apply                    Применить stack/.env, Caddy и branding
   gorec logs [service]           Логи основного стека и Xray Monitoring
-  gorec doctor                   Диагностика DNS, HTTPS, API и контейнеров
+  gorec doctor                   Диагностика DNS, HTTPS, Remnawave, ACME и контейнеров
   gorec config [target]          bot, stack, caddy, wizard или paths
   gorec versions                 Сравнить текущие и доступные commit
   gorec update [component]       all, bot, cabinet или xray
