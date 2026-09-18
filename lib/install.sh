@@ -3,6 +3,7 @@
 install_stack() {
   require_root
   with_lock
+  migrate_legacy_layout
   ui_banner 'Автоматическая установка Bot + Cabinet'
   ui_section 'Подготовка'
   ui_step pending 'Проверка сервера и системных зависимостей'
@@ -81,7 +82,7 @@ uninstall_stack() {
   require_root
   local purge="${1:-}"
   if [[ "$purge" == "--purge-data" ]]; then
-    confirm_phrase "Будут удалены контейнеры, база, конфигурация и бэкапы." "PURGE-GOREC" || die "Отменено."
+    confirm_phrase "Будут удалены контейнеры, база, конфигурация, исходники и бэкапы." "PURGE-GOREC" || die "Отменено."
   else
     confirm "Удалить контейнеры и программу, сохранив конфигурацию, данные и бэкапы?" || die "Отменено."
   fi
@@ -94,16 +95,31 @@ uninstall_stack() {
     fi
   fi
   systemctl disable --now gorec-backup.timer >/dev/null 2>&1 || true
-  safe_realpath_child "$INSTALL_ROOT" /opt || die "Небезопасный INSTALL_ROOT: $INSTALL_ROOT"
-  rm -rf -- "$INSTALL_ROOT"
   rm -f -- /usr/local/bin/gorec
   rm -rf -- /usr/local/lib/gorec-manager /usr/local/lib/gorec-manager.previous
+
+  # Source checkouts live outside INSTALL_ROOT in opt-max; remove them on any uninstall
+  # (they are re-cloned on next install). Config/data/backups stay unless --purge-data.
+  for _gorec_src in "$BOT_SOURCE_DIR" "$CABINET_SOURCE_DIR" "$XRAY_STATUS_SOURCE_DIR"; do
+    if [[ -e "$_gorec_src" ]]; then
+      safe_realpath_child "$_gorec_src" /opt || die "Небезопасный путь исходников: $_gorec_src"
+      rm -rf -- "$_gorec_src"
+    fi
+  done
+
   if [[ "$purge" == "--purge-data" ]]; then
-    safe_realpath_child "$CONFIG_ROOT" /etc || die "Небезопасный CONFIG_ROOT: $CONFIG_ROOT"
-    safe_realpath_child "$DATA_ROOT" /var/lib || die "Небезопасный DATA_ROOT: $DATA_ROOT"
-    rm -rf -- "$CONFIG_ROOT" "$DATA_ROOT"
+    safe_realpath_child "$INSTALL_ROOT" /opt || die "Небезопасный INSTALL_ROOT: $INSTALL_ROOT"
+    rm -rf -- "$INSTALL_ROOT"
+    # Legacy trees (pre-opt-max / bedolaga)
+    [[ -d /etc/gorec ]] && rm -rf -- /etc/gorec
+    [[ -d /var/lib/gorec ]] && rm -rf -- /var/lib/gorec
+    [[ -d /opt/bedolaga ]] && safe_realpath_child /opt/bedolaga /opt && rm -rf -- /opt/bedolaga
+    [[ -d /etc/bedolaga ]] && rm -rf -- /etc/bedolaga
+    [[ -d /var/lib/bedolaga ]] && rm -rf -- /var/lib/bedolaga
     success "Gorec и все управляемые данные удалены без возможности восстановления."
   else
-    success "Программа удалена. Конфигурация: $CONFIG_ROOT, данные: $DATA_ROOT"
+    # Keep opt-max config+data under INSTALL_ROOT; only drop compose file if present
+    rm -f -- "$COMPOSE_FILE"
+    success "Программа удалена. Конфигурация и данные сохранены в $CONFIG_ROOT (бэкапы: $BACKUP_ROOT)."
   fi
 }

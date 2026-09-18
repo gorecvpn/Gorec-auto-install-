@@ -6,8 +6,10 @@ TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf -- "$TEST_ROOT"' EXIT
 
 export GOREC_INSTALL_ROOT="$TEST_ROOT/opt/gorec"
-export GOREC_CONFIG_ROOT="$TEST_ROOT/etc/gorec"
-export GOREC_DATA_ROOT="$TEST_ROOT/var/lib/gorec"
+export GOREC_CONFIG_ROOT="$TEST_ROOT/opt/gorec"
+export GOREC_DATA_ROOT="$TEST_ROOT/opt/gorec"
+export GOREC_BOT_SOURCE_DIR="$TEST_ROOT/opt/bot"
+export GOREC_CABINET_SOURCE_DIR="$TEST_ROOT/opt/cabinet"
 export GOREC_LIB_ROOT="$PROJECT_ROOT"
 
 # shellcheck disable=SC1091

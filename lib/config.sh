@@ -173,7 +173,8 @@ clone_managed_repo() {
 }
 
 prepare_sources() {
-  mkdir -p "$SOURCE_ROOT"
+  # Bot/Cabinet sources are top-level /opt/{bot,cabinet}; SOURCE_ROOT keeps optional xray-statuspage.
+  mkdir -p "$(dirname "$BOT_SOURCE_DIR")" "$(dirname "$CABINET_SOURCE_DIR")" "$SOURCE_ROOT"
   clone_managed_repo "$BOT_REPOSITORY" "$BOT_SOURCE_DIR" "GorecBot"
   clone_managed_repo "$CABINET_REPOSITORY" "$CABINET_SOURCE_DIR" "Gorec Cabinet"
   mkdir -p "$DATA_ROOT/bot/logs" "$DATA_ROOT/bot/data" "$DATA_ROOT/bot/uploads"

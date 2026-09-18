@@ -123,7 +123,7 @@ verify_backup_archive() {
 backup_restore() {
   require_root
   local archive="${1:-}"
-  [[ -n "$archive" ]] || die "Укажите архив: gorec restore /var/lib/gorec/backups/<file>.tar.gz"
+  [[ -n "$archive" ]] || die "Укажите архив: gorec restore /opt/gorec/backups/<file>.tar.gz"
   archive="$(readlink -m "$archive")"
   verify_backup_archive "$archive"
   confirm_phrase "Восстановление перезапишет конфигурацию и базу данных." "RESTORE" || die "Отменено."

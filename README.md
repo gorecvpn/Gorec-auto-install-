@@ -179,7 +179,7 @@ gorec self-update
 - порты `2112`, `8080`, `8081` и диапазон Xray не публикуются на host;
 - пользователи открывают Status Page только по отдельному HTTPS-домену через Caddy;
 - Status Page собирается из официальной ветки `go-build`, поэтому установка работает на AMD64 и ARM64;
-- база, ключ шифрования и настройки Status Page хранятся в `/var/lib/gorec/xray-statuspage` и входят в бэкапы Manager.
+- база, ключ шифрования и настройки Status Page хранятся в `/opt/gorec/xray-statuspage` и входят в бэкапы Manager (`/opt/gorec/backups`).
 
 Для уже работающей установки сначала обновите Manager, затем запустите:
 
@@ -283,20 +283,25 @@ gorec rollback
 ```text
 /usr/local/bin/gorec                 CLI
 /usr/local/lib/gorec-manager/        код менеджера
+/opt/bot/                            исходный код Bot (checkout)
+/opt/cabinet/                        исходный код Cabinet (checkout)
 /opt/gorec/compose.yaml              управляемый Docker Compose
-/opt/gorec/sources/bot/              исходный код Bot
-/opt/gorec/sources/cabinet/          исходный код Cabinet
-/opt/gorec/sources/xray-statuspage/  ветка go-build опциональной Status Page
-/etc/gorec/stack.env                 параметры Compose
-/etc/gorec/bot.env                   конфигурация Bot
-/etc/gorec/Caddyfile                 reverse proxy
-/var/lib/gorec/bot/                  постоянные данные Bot
-/var/lib/gorec/xray-statuspage/      данные опциональной Status Page
-/var/lib/gorec/backups/              резервные копии
-/var/lib/gorec/state/                состояние обновлений
+/opt/gorec/Caddyfile                 reverse proxy
+/opt/gorec/stack.env                 параметры Compose
+/opt/gorec/bot.env                   конфигурация Bot
+/opt/gorec/bot/                      постоянные данные Bot (не путать с /opt/bot)
+/opt/gorec/xray-statuspage/          данные опциональной Status Page
+/opt/gorec/sources/xray-statuspage/  исходники Status Page (при необходимости)
+/opt/gorec/backups/                  резервные копии (только под /opt)
+/opt/gorec/state/                    состояние обновлений
+/opt/gorec/manager.log               журнал менеджера
 ```
 
-Логотип сообщений можно заменить в `/var/lib/gorec/bot/vpn_logo.png` — upstream checkout останется чистым.
+Логотип сообщений можно заменить в `/opt/gorec/bot/vpn_logo.png` — upstream checkout в `/opt/bot` останется чистым.
+
+Переопределения (по желанию): `GOREC_INSTALL_ROOT`, `GOREC_CONFIG_ROOT`, `GOREC_DATA_ROOT`, `GOREC_BACKUP_ROOT`, `GOREC_BOT_SOURCE_DIR`, `GOREC_CABINET_SOURCE_DIR`.
+
+При `install` / `update` / `doctor` / `start` / `apply` Manager переносит прежние пути (`/etc/gorec`, `/var/lib/gorec`, `/opt/gorec/sources/{bot,cabinet}`, а также деревья bedolaga) в layout выше: существующие файлы не затираются (move-if-missing).
 
 </details>
 

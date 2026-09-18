@@ -2,6 +2,19 @@
 
 Все заметные изменения проекта документируются в этом файле.
 
+## 1.4.0 — 2026-09-18
+
+### Changed
+- Layout **opt-max**: конфиги, данные и бэкапы по умолчанию под `/opt/gorec` (больше нет defaults на `/etc/gorec` и `/var/lib/gorec`).
+- Исходники Bot → `/opt/bot`, Cabinet → `/opt/cabinet` (не под `/opt/gorec/sources/`).
+- `BACKUP_ROOT` по умолчанию `/opt/gorec/backups`; миграция переносит `/var/lib/gorec/backups` и `/var/lib/bedolaga/backups`.
+- При install/update/doctor/start/apply выполняется миграция legacy-путей (gorec и bedolaga) без слепой перезаписи.
+
+### Migration
+- `/opt/gorec/sources/bot` → `/opt/bot`, `/opt/gorec/sources/cabinet` → `/opt/cabinet`
+- `/etc/gorec/*` → `/opt/gorec/`, `/var/lib/gorec/*` → `/opt/gorec/`
+- Остатки bedolaga (`/opt|/etc|/var/lib/bedolaga`, CLI) обнаруживаются и переносятся/предлагаются к удалению
+
 ## 1.3.0 — 2026-08-07
 
 - При запуске `gorec` Manager автоматически проверяет последний стабильный GitHub Release и безопасно устанавливает новую версию.
