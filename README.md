@@ -383,6 +383,3 @@ Gorec Auto Installer распространяется по лицензии [MIT
 </div>
 
 
----
-
-> Working copy for **gorecvpn/Gorec-auto-install-**, based on [Reibik/Auto_Install-Bedolaga_Bot](https://github.com/Reibik/Auto_Install-Bedolaga_Bot).
