@@ -15,8 +15,6 @@
 
 </div>
 
-![Gorec Manager — Bot, Cabinet, Xray Checker и Status Page](docs/assets/gorec-stack-preview.png)
-
 > [!NOTE]
 > **Gorec Manager** разворачивает [GorecBot](https://github.com/gorecvpn/GorecVPN-), [Gorec Cabinet](https://github.com/gorecvpn/Gorec-Cabinet), PostgreSQL, Redis и Caddy. По желанию тот же мастер устанавливает [Xray Checker](https://github.com/kutovoys/xray-checker) и [Xray Checker Status Page](https://github.com/Mrvibecodic/xray-checker-statuspage/tree/go-build).
 
