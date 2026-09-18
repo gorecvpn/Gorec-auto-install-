@@ -7,7 +7,7 @@ GOREC_COMMON_LOADED=1
 
 # Переменные ниже используются другими файлами после source.
 # shellcheck disable=SC2034
-readonly GOREC_VERSION="1.4.0"
+readonly GOREC_VERSION="1.4.1"
 readonly GOREC_REPOSITORY="${GOREC_REPOSITORY:-gorecvpn/Gorec-auto-install-}"
 readonly BOT_REPOSITORY="${BOT_REPOSITORY:-https://github.com/gorecvpn/GorecVPN-.git}"
 readonly CABINET_REPOSITORY="${CABINET_REPOSITORY:-https://github.com/gorecvpn/Gorec-Cabinet.git}"
