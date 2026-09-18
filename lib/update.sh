@@ -81,6 +81,9 @@ update_components() {
   dotenv_merge_missing "$BOT_ENV" "$BOT_SOURCE_DIR/.env.example"
   sanitize_bot_env
   sync_bot_assets
+  copy_compose_template
+  ensure_compose_dotenv
+  render_caddyfile
 
   local -a build_services
   if [[ "$component" == all ]]; then

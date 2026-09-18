@@ -7,7 +7,7 @@ GOREC_COMMON_LOADED=1
 
 # Переменные ниже используются другими файлами после source.
 # shellcheck disable=SC2034
-readonly GOREC_VERSION="1.4.2"
+readonly GOREC_VERSION="1.5.0"
 readonly GOREC_REPOSITORY="${GOREC_REPOSITORY:-gorecvpn/Gorec-auto-install-}"
 readonly BOT_REPOSITORY="${BOT_REPOSITORY:-https://github.com/gorecvpn/GorecVPN-.git}"
 readonly CABINET_REPOSITORY="${CABINET_REPOSITORY:-https://github.com/gorecvpn/Gorec-Cabinet.git}"
@@ -141,6 +141,7 @@ migrate_refresh_stack_env_paths() {
       dotenv_set "$STACK_ENV" XRAY_STATUS_SOURCE_DIR "$XRAY_STATUS_SOURCE_DIR"
     fi
   fi
+  ensure_compose_dotenv
 }
 
 # Detect previous Gorec (/etc,/var/lib, sources under /opt/gorec) and bedolaga trees; migrate into opt-max.
@@ -231,9 +232,28 @@ template_dir() {
   printf '%s/templates\n' "$GOREC_LIB_ROOT"
 }
 
+
+# Docker Compose auto-loads $INSTALL_ROOT/.env for ${VAR} interpolation in compose.yaml.
+# Without it, bare `cd /opt/gorec && docker compose …` expands BOT_ENV/CONFIG_ROOT empty
+# ("env file not found: stat : no such file").
+ensure_compose_dotenv() {
+  local compose_dotenv="${INSTALL_ROOT}/.env"
+  [[ -f "$STACK_ENV" ]] || return 0
+  mkdir -p "$INSTALL_ROOT"
+  local stack_real
+  stack_real="$(readlink -m "$STACK_ENV")"
+  if [[ "$(readlink -m "$compose_dotenv")" == "$stack_real" ]]; then
+    return 0
+  fi
+  # Prefer symlink so stack.env remains the single source of truth.
+  ln -sfn "$stack_real" "$compose_dotenv"
+  chmod 600 "$STACK_ENV" 2>/dev/null || true
+}
+
 compose() {
   [[ -f "$COMPOSE_FILE" ]] || die "Не найден $COMPOSE_FILE. Сначала выполните gorec install."
   [[ -f "$STACK_ENV" ]] || die "Не найден $STACK_ENV. Сначала выполните gorec install."
+  ensure_compose_dotenv
   local -a profile_args=()
   if xray_monitoring_enabled; then
     profile_args=(--profile xray-monitoring)

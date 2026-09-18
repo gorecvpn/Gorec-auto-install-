@@ -2,6 +2,22 @@
 
 Все заметные изменения проекта документируются в этом файле.
 
+## 1.5.0 — 2026-09-18
+
+### Fixed
+- Bare `docker compose` from `/opt/gorec` no longer expands empty `${BOT_ENV}` / `${CONFIG_ROOT}`: install/apply/update/migrate now keep `/opt/gorec/.env` as a symlink to `stack.env` (Compose auto-loads it). CLI wrappers still pass `--env-file`.
+- Install wizard no longer seeds Remnawave from sample/foreign hosts (`example.com`, `haybaadmin.haybavpn.ru`, bedolaga*). Placeholders are stripped from `bot.env` on sanitize; wizard requires a real URL + API key and optionally probes `GET /api/system/stats`.
+- `gorec doctor` flags sample Remnawave URLs, probes the API, checks DNS A → this server for webhook/cabinet, ports 80/443, Compose `.env`, Caddy `/uploads`, and notes `ADMIN_NOTIFICATIONS_CHAT_ID` (no invented chat ids; sample `-1001234567890` cleared).
+- Webhook Caddy site uses `handle { reverse_proxy … }` so ACME http-01 on `/.well-known` is not specially stolen; certificate failures still do not block install (surfaced via doctor/logs).
+
+### Changed
+- `gorec apply` / `start` / `update` re-copy `compose.yaml`, refresh `.env` symlink, and re-render Caddyfile (keeps `/uploads/*` → bot on cabinet domain).
+- Compose template uses safer defaults (`${BOT_ENV:-bot.env}`, `${DATA_ROOT:-.}`, …) when interpolation env is incomplete.
+
+### Migration
+- After `gorec self-update` to v1.5.0 run: `gorec apply` (recreates `/opt/gorec/.env`, refreshes Caddy). Then `cd /opt/gorec && docker compose ps` works without `--env-file`.
+- If Remnawave still points at a foreign/sample host, fix via `gorec config wizard` or edit `bot.env`, then `gorec apply`.
+
 ## 1.4.2 — 2026-09-18
 
 ### Fixed

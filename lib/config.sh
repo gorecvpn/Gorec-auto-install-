@@ -43,8 +43,70 @@ validate_username() {
   [[ "$1" =~ ^[A-Za-z0-9_]{5,32}$ ]]
 }
 
+
 validate_api_key() {
   [[ ${#1} -ge 8 && ${#1} -le 4096 && "$1" =~ ^[A-Za-z0-9._~+/-]+$ ]]
+}
+
+# Sample / foreign Remnawave hosts must never be offered as install defaults.
+is_placeholder_remnawave_url() {
+  local url="${1:-}"
+  local lowered host
+  [[ -n "$url" ]] || return 0
+  lowered="$(printf '%s' "$url" | tr '[:upper:]' '[:lower:]')"
+  case "$lowered" in
+    *example.com* | *example.org* | *haybavpn.ru* | *haybaadmin* | *bedolaga* | *your-panel* | *localhost* | *127.0.0.1*)
+      return 0
+      ;;
+  esac
+  host="${lowered#https://}"
+  host="${host#http://}"
+  host="${host%%/*}"
+  host="${host%%:*}"
+  [[ -z "$host" ]] && return 0
+  return 1
+}
+
+is_placeholder_remnawave_key() {
+  local key="${1:-}"
+  local lowered
+  [[ -n "$key" ]] || return 0
+  lowered="$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')"
+  case "$lowered" in
+    your_api_key_here | changeme | replace_me | 'your-api-key' | 'xxx' | 'test' | 'secret')
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+is_placeholder_admin_chat_id() {
+  local chat_id="${1:-}"
+  case "$chat_id" in
+    '' | -1001234567890 | 1001234567890 | 1234567890 | -100123456789 | YOUR_CHAT_ID | '<CHAT_ID>' | '# '*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+probe_remnawave_api() {
+  local url="${1%/}"
+  local key="$2"
+  local code=''
+  [[ -n "$url" && -n "$key" ]] || return 1
+  is_placeholder_remnawave_url "$url" && return 1
+  # Remnawave typically accepts Bearer; some panels also accept plain API key header.
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 \
+    -H "Authorization: Bearer ${key}" \
+    "${url}/api/system/stats" 2>/dev/null || true)"
+  if [[ "$code" =~ ^2 ]]; then
+    return 0
+  fi
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 \
+    -H "X-Api-Key: ${key}" \
+    "${url}/api/system/stats" 2>/dev/null || true)"
+  [[ "$code" =~ ^2 ]]
 }
 
 prompt_value() {
@@ -217,6 +279,9 @@ sanitize_bot_env() {
   local key value removed=0
   local -a optional_integer_keys=(
     ADMIN_REPORTS_TOPIC_ID
+    ADMIN_NOTIFICATIONS_TOPIC_ID
+    ADMIN_NOTIFICATIONS_TICKET_TOPIC_ID
+    ADMIN_NOTIFICATIONS_NALOG_TOPIC_ID
     MULENPAY_SHOP_ID
     FREEKASSA_SHOP_ID
     FREEKASSA_PAYMENT_SYSTEM_ID
@@ -233,8 +298,30 @@ sanitize_bot_env() {
       ((removed += 1))
     fi
   done
+
+  value="$(dotenv_get "$BOT_ENV" REMNAWAVE_API_URL 2>/dev/null || true)"
+  if is_placeholder_remnawave_url "$value"; then
+    dotenv_unset "$BOT_ENV" REMNAWAVE_API_URL
+    ((removed += 1))
+  fi
+  value="$(dotenv_get "$BOT_ENV" REMNAWAVE_API_KEY 2>/dev/null || true)"
+  if is_placeholder_remnawave_key "$value"; then
+    dotenv_unset "$BOT_ENV" REMNAWAVE_API_KEY
+    ((removed += 1))
+  fi
+
+  value="$(dotenv_get "$BOT_ENV" ADMIN_NOTIFICATIONS_CHAT_ID 2>/dev/null || true)"
+  if is_placeholder_admin_chat_id "$value"; then
+    dotenv_unset "$BOT_ENV" ADMIN_NOTIFICATIONS_CHAT_ID
+    # Avoid Telegram "chat not found" from .env.example sample ids.
+    if [[ "$(dotenv_get "$BOT_ENV" ADMIN_NOTIFICATIONS_ENABLED 2>/dev/null || true)" == true ]]; then
+      dotenv_set "$BOT_ENV" ADMIN_NOTIFICATIONS_ENABLED "false"
+    fi
+    ((removed += 1))
+  fi
+
   if [[ "$removed" -gt 0 ]]; then
-    success "Удалены несовместимые placeholder-значения опциональных числовых параметров Bot: $removed."
+    success "Удалены несовместимые placeholder-значения параметров Bot: $removed."
   fi
 }
 
@@ -296,6 +383,7 @@ write_required_configuration() {
   dotenv_set "$BOT_ENV" CABINET_ALLOWED_ORIGINS "https://${cabinet_domain}"
   dotenv_set "$BOT_ENV" CABINET_JWT_SECRET "$cabinet_secret"
   chmod 600 "$STACK_ENV" "$BOT_ENV"
+  ensure_compose_dotenv
 }
 
 render_caddyfile() {
@@ -324,6 +412,7 @@ copy_compose_template() {
   template="$(template_dir)/compose.yaml"
   [[ -f "$template" ]] || die "Не найден шаблон $template"
   install -m 644 "$template" "$COMPOSE_FILE"
+  ensure_compose_dotenv
 }
 
 configuration_wizard() {
@@ -350,9 +439,24 @@ configuration_wizard() {
   current="$(dotenv_get "$BOT_ENV" ADMIN_IDS 2>/dev/null || true)"
   prompt_value admin_ids "Telegram ID администраторов через запятую" "$current" validate_admin_ids
   current="$(dotenv_get "$BOT_ENV" REMNAWAVE_API_URL 2>/dev/null || true)"
-  prompt_value remnawave_url "URL Remnawave Panel" "$current" validate_https_url
+  if is_placeholder_remnawave_url "$current"; then
+    current=""
+  fi
+  prompt_value remnawave_url "URL Remnawave Panel (https://…, без sample-хостов)" "$current" validate_https_url
+  if is_placeholder_remnawave_url "$remnawave_url"; then
+    die "Укажите реальный URL вашей Remnawave Panel — sample/чужие хосты (example.com, hayba*, bedolaga*) запрещены."
+  fi
   current="$(dotenv_get "$BOT_ENV" REMNAWAVE_API_KEY 2>/dev/null || true)"
+  if is_placeholder_remnawave_key "$current"; then
+    current=""
+  fi
   prompt_value remnawave_key "API key Remnawave" "$current" validate_api_key 1
+  if probe_remnawave_api "$remnawave_url" "$remnawave_key"; then
+    success "Remnawave API отвечает: ${remnawave_url%/}/api/system/stats"
+  else
+    warn "Не удалось проверить Remnawave API (${remnawave_url%/}/api/system/stats). Проверьте URL, ключ и доступность панели."
+    confirm "Продолжить установку с этим Remnawave URL?" || die "Исправьте Remnawave URL/API key и повторите мастер."
+  fi
   current="$(dotenv_get "$STACK_ENV" WEBHOOK_DOMAIN 2>/dev/null || true)"
   prompt_value webhook_domain "Домен webhook, без https://" "$current" validate_domain
   current="$(dotenv_get "$STACK_ENV" CABINET_DOMAIN 2>/dev/null || true)"
@@ -422,7 +526,15 @@ validate_bot_values() {
   validate_bot_token "$token" || { error "Некорректный BOT_TOKEN."; return 1; }
   validate_admin_ids "$admin_ids" || { error "Некорректный ADMIN_IDS."; return 1; }
   validate_https_url "$remnawave_url" || { error "Некорректный REMNAWAVE_API_URL."; return 1; }
+  if is_placeholder_remnawave_url "$remnawave_url"; then
+    error "REMNAWAVE_API_URL выглядит как sample/чужой хост (example.com, hayba*, bedolaga*). Укажите URL своей панели."
+    return 1
+  fi
   validate_api_key "$remnawave_key" || { error "Некорректный REMNAWAVE_API_KEY."; return 1; }
+  if is_placeholder_remnawave_key "$remnawave_key"; then
+    error "REMNAWAVE_API_KEY выглядит как placeholder. Укажите ключ своей панели."
+    return 1
+  fi
 }
 
 validate_managed_paths() {
