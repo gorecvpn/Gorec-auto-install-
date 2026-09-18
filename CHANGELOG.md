@@ -2,6 +2,12 @@
 
 Все заметные изменения проекта документируются в этом файле.
 
+## 1.5.1 — 2026-09-18
+
+### Changed
+- Default bot repository updated after rename: `gorecvpn/GorecVPN-` → `gorecvpn/Gorec` (`BOT_REPOSITORY`).
+- README links point to the renamed bot repo.
+
 ## 1.5.0 — 2026-09-18
 
 ### Fixed

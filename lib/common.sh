@@ -7,9 +7,9 @@ GOREC_COMMON_LOADED=1
 
 # Переменные ниже используются другими файлами после source.
 # shellcheck disable=SC2034
-readonly GOREC_VERSION="1.5.0"
+readonly GOREC_VERSION="1.5.1"
 readonly GOREC_REPOSITORY="${GOREC_REPOSITORY:-gorecvpn/Gorec-auto-install-}"
-readonly BOT_REPOSITORY="${BOT_REPOSITORY:-https://github.com/gorecvpn/GorecVPN-.git}"
+readonly BOT_REPOSITORY="${BOT_REPOSITORY:-https://github.com/gorecvpn/Gorec.git}"
 readonly CABINET_REPOSITORY="${CABINET_REPOSITORY:-https://github.com/gorecvpn/Gorec-Cabinet.git}"
 readonly XRAY_STATUS_REPOSITORY="${XRAY_STATUS_REPOSITORY:-https://github.com/Mrvibecodic/xray-checker-statuspage.git}"
 

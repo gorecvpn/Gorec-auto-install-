@@ -16,7 +16,7 @@
 </div>
 
 > [!NOTE]
-> **Gorec Manager** разворачивает [GorecBot](https://github.com/gorecvpn/GorecVPN-), [Gorec Cabinet](https://github.com/gorecvpn/Gorec-Cabinet), PostgreSQL, Redis и Caddy. По желанию тот же мастер устанавливает [Xray Checker](https://github.com/kutovoys/xray-checker) и [Xray Checker Status Page](https://github.com/Mrvibecodic/xray-checker-statuspage/tree/go-build).
+> **Gorec Manager** разворачивает [GorecBot](https://github.com/gorecvpn/Gorec), [Gorec Cabinet](https://github.com/gorecvpn/Gorec-Cabinet), PostgreSQL, Redis и Caddy. По желанию тот же мастер устанавливает [Xray Checker](https://github.com/kutovoys/xray-checker) и [Xray Checker Status Page](https://github.com/Mrvibecodic/xray-checker-statuspage/tree/go-build).
 
 ---
 
@@ -367,7 +367,7 @@ CI дополнительно проверяет итоговый Docker Compose
 
 ## 🤝 Связанные проекты
 
-- [gorecvpn / GorecVPN-](https://github.com/gorecvpn/GorecVPN-)
+- [gorecvpn / Gorec](https://github.com/gorecvpn/Gorec)
 - [gorecvpn / Gorec-Cabinet](https://github.com/gorecvpn/Gorec-Cabinet)
 - [Документация Gorec](https://gorecdev.mintlify.app/introduction)
 - [kutovoys / xray-checker](https://github.com/kutovoys/xray-checker)
