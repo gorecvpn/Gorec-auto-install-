@@ -2,6 +2,11 @@
 
 Все заметные изменения проекта документируются в этом файле.
 
+## 1.4.2 — 2026-09-18
+
+### Fixed
+- Caddy on the cabinet domain now proxies `/uploads/*` to the bot (StaticFiles). Without this, raffle prize photos uploaded via the Mini App were stored as `https://cabinet…/uploads/…` and rendered as blank white cards because `/uploads` fell through to the SPA.
+
 ## 1.4.0 — 2026-09-18
 
 ### Changed

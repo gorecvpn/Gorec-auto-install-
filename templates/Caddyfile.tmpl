@@ -22,6 +22,11 @@
     reverse_proxy bot:8080
   }
 
+  # Prize/news media StaticFiles on the bot — must not fall through to cabinet SPA
+  handle /uploads/* {
+    reverse_proxy bot:8080
+  }
+
   handle {
     reverse_proxy cabinet:80
   }
